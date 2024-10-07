@@ -3,15 +3,9 @@ const commentBox = document
   .querySelector("#commentapp > bili-comments")
   .shadowRoot.querySelector("#header > bili-comments-header-renderer")
   .shadowRoot.querySelector("#commentbox > bili-comment-box");
-const richTextarea = commentBox.shadowRoot.querySelector(
-  "#editor > bili-comment-rich-textarea"
-);
-const picturesUpload = commentBox.shadowRoot.querySelector(
-  "#editor > bili-comment-pictures-upload"
-);
-const inputarea = richTextarea.shadowRoot.querySelector(
-  "#input > div > div.brt-editor"
-);
+const richTextarea = commentBox.richTextarea;
+const picturesUpload = commentBox.picturesUpload;
+const inputarea = richTextarea.brt.editor;
 inputarea.addEventListener("paste", async (event) => {
   // 获取剪贴板中的项目
   const items = (event.clipboardData || navigator.clipboardData).items;
@@ -39,6 +33,10 @@ inputarea.addEventListener("paste", async (event) => {
 
       // 设置图片数据
       setPicData(width, height, size, base64String, picturesUpload);
+      // 显示图片区
+      picturesUpload.style.display = "flex";
+      // 更新图片区图片dom显示,源码分析hack得此api
+      picturesUpload.update();
     }
   }
 });
