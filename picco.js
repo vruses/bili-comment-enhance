@@ -10,7 +10,8 @@ const inputarea = richTextarea.brt.editor;
 inputarea.addEventListener("paste", async (event) => {
   // 获取剪贴板中的项目
   const items = (event.clipboardData || navigator.clipboardData).items;
-
+  // 多个上传图片任务
+  const uploadTasks = [];
   // 遍历所有的剪贴板数据项（一个数据项可能包含多张图片）
   for (let i = 0; i < items.length; i++) {
     // 检查是否是文本类型
@@ -20,29 +21,28 @@ inputarea.addEventListener("paste", async (event) => {
     else if (items[i].kind === "file" && items[i].type.startsWith("image/")) {
       // 获取文件并处理图片
       const file = items[i].getAsFile();
-      // 上传图片
-      const { code, data, message, ttl } = await uploadFile(file);
-
-      const base64String = await getBase64FromFile(file);
-
-      if (code !== 0) {
-        console.warn(message);
-        return;
-      }
-      // 设置图片数据
-      setPicData(
-        data.image_width,
-        data.image_height,
-        data.img_size,
-        data.image_url,
-        base64String,
-        commentBox
-      );
-      // 显示图片区
-      picturesUpload.style.display = "flex";
-      // 更新图片区图片dom显示,源码分析hack得此api
-      picturesUpload.update();
+      // 分割每份上传任务避免阻塞
+      uploadTasks.push(mergeSingleTask(file));
     }
+  }
+  const picDataSet = await Promise.all(uploadTasks);
+  console.log(picDataSet);
+  for (picData of picDataSet) {
+    const data = picData.fileInfo;
+    const base64String = picData.base64String;
+    // 设置图片数据
+    setPicData(
+      data.image_width,
+      data.image_height,
+      data.img_size,
+      data.image_url,
+      base64String,
+      commentBox
+    );
+    // 显示图片区
+    picturesUpload.style.display = "flex";
+    // 更新图片区图片dom显示,源码分析hack得此api
+    picturesUpload.update();
   }
 });
 
@@ -108,7 +108,20 @@ function uploadFile(file) {
     },
     credentials: "include",
     body: formData,
-  }).then((response) => {
-    return response.json();
-  });
+  })
+    .then((response) => {
+      return response.json();
+    })
+    .catch((reason) => {
+      // 网络问题上传失败或者返回0以外的code需要显示图片上传失败
+      console.log(reason)
+      return { code: -1 };
+    });
+}
+
+// 合并每个文件上传到响应结果过程中的任务
+async function mergeSingleTask(file) {
+  const base64String = await getBase64FromFile(file);
+  const fileInfo = await uploadFile(file);
+  return { base64String, fileInfo };
 }
