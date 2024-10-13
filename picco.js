@@ -21,29 +21,15 @@ inputarea.addEventListener("paste", async (event) => {
     else if (items[i].kind === "file" && items[i].type.startsWith("image/")) {
       // 获取文件并处理图片
       const file = items[i].getAsFile();
+      // 显示图片区
+      picturesUpload.style.display = "flex";
+      // 初始化图片显示并拿到图片对象方便修改数据
+      const taskItem = initPicData(commentBox);
       // 分割每份上传任务避免阻塞
-      uploadTasks.push(mergeSingleTask(file));
+      uploadTasks.push(taskTemplate(taskItem, file, commentBox));
     }
   }
-  const picDataSet = await Promise.all(uploadTasks);
-  console.log(picDataSet);
-  for (picData of picDataSet) {
-    const data = picData.fileInfo;
-    const base64String = picData.base64String;
-    // 设置图片数据
-    setPicData(
-      data.image_width,
-      data.image_height,
-      data.img_size,
-      data.image_url,
-      base64String,
-      commentBox
-    );
-    // 显示图片区
-    picturesUpload.style.display = "flex";
-    // 更新图片区图片dom显示,源码分析hack得此api
-    picturesUpload.update();
-  }
+  await Promise.all(uploadTasks);
 });
 
 // 获取文件的base64编码
@@ -56,27 +42,17 @@ function getBase64FromFile(file) {
 }
 
 // 将数据交给picturesUpload和commentBox,一个用于显示一个准备上传给服务器
-function setPicData(
-  img_width,
-  img_height,
-  img_size,
-  img_src,
-  base64String,
-  commentBox
-) {
+function initPicData(commentBox) {
   const item = {
-    data: {
-      img_height,
-      img_size,
-      img_width,
-      img_src,
-    },
+    data: {},
     msg: "",
-    src: base64String,
-    status: 1,
+    src: "",
+    // 根据status决定图片显示,0为初始化，1正常显示，2显示上传失败
+    status: 0,
   };
   commentBox.picturesUpload.items.push(item);
   commentBox.pics.push(item.data);
+  return item;
 }
 
 // 获取cookie某个值
@@ -114,14 +90,30 @@ function uploadFile(file) {
     })
     .catch((reason) => {
       // 网络问题上传失败或者返回0以外的code需要显示图片上传失败
-      console.log(reason)
+      console.log(reason);
       return { code: -1 };
     });
 }
 
-// 合并每个文件上传到响应结果过程中的任务
-async function mergeSingleTask(file) {
+// 每个文件上传到返回响应结果后的流程
+async function taskTemplate(taskItem, file, commentBox) {
+  // 图片本地上传后更新显示
   const base64String = await getBase64FromFile(file);
-  const fileInfo = await uploadFile(file);
-  return { base64String, fileInfo };
+  taskItem.src = base64String;
+  // hack源码得到的api，修改属性数据时调用更新
+  commentBox.picturesUpload.update();
+
+  // 图片上传服务器后更新显示和状态
+  const res = await uploadFile(file);
+  if (res.code >= 0) {
+    const fileInfo = res.data;
+    taskItem.data.img_size = fileInfo.img_size;
+    taskItem.data.img_width = fileInfo.image_width;
+    taskItem.data.img_height = fileInfo.image_height;
+    taskItem.data.img_src = fileInfo.image_url;
+  }
+  taskItem.status = res.code === 0 ? 1 : 2;
+  // 响应结果后再次更新
+  commentBox.picturesUpload.update();
+  commentBox.update();
 }
